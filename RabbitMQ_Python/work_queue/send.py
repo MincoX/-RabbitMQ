@@ -8,7 +8,7 @@ connection = manager.get_connect()
 channel = connection.channel()
 channel.queue_declare(queue='work_queue')
 
-for i in range(100):
+for i in range(20):
     message = f'{i} >>> hello world'
     channel.basic_publish(
         exchange='',

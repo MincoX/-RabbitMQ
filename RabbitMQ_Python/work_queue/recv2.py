@@ -16,7 +16,7 @@ def callback(ch, method, properties, body):
 
 
 # 定义消息的处理数量, 指明当消费者中有 n 个消息未发送确认信息时，生产者就停止向此消费者发送消息
-channel.basic_qos(prefetch_count=1)
+channel.basic_qos(prefetch_count=3)
 
 channel.basic_consume(
     queue='work_queue',

@@ -7,7 +7,7 @@ connection = manager.get_connect()
 
 # 创建通道
 channel = connection.channel()
-# 声明创建的 channel
+# 声明新队列
 channel.queue_declare(queue='simple')
 
 # 向队列中添加消息
