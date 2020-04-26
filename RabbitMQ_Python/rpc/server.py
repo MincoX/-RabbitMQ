@@ -1,52 +1,50 @@
 import pika
 
-from rabbitmq_connect import Manager
-
-manager = Manager()
-connection = manager.get_connect()
-
+parameters = pika.ConnectionParameters('49.232.19.51', 5672, '/', pika.PlainCredentials('MincoX', 'mincoroot'))
+connection = pika.BlockingConnection(parameters)
 channel = connection.channel()
-channel.queue_declare(queue='queue_rpc')
+channel.queue_declare(queue='rpc_queue')
 
 
-def fib(n):
-    """
-    计算斐波那契数列
-    :param n:
+def task_a():
+    return "task a done!"
+
+
+def task_b():
+    return "task b done!"
+
+
+def on_request(chan, method, props, body):
+    """执行过程函数将返回的结果通过 MQ 返回给调用者
+    :param chan:
+    :param method:
+    :param props:
+    :param body:
     :return:
     """
-    if n == 0:
-        return 0
-    elif n == 1:
-        return 1
-    else:
-        return fib(n - 1) + fib(n - 2)
+    print(f'rpc server receive task >>> {props}')
+    task = props.app_id
 
+    if task == 'task_a':
+        resp = task_a()
+    elif task == 'task_b':
+        resp = task_b()
 
-#  应答函数,它是我们接受到消息后如处理的函数替代原来的callback
-def on_request(ch, method, props, body):
-    n = int(body)
-    print(" [.] fib(%s)" % n)
-    response = fib(n)
-
-    ch.basic_publish(
+    chan.basic_publish(
         exchange='',
-        # 返回的队列,从属性的reply_to取出来
         routing_key=props.reply_to,
-        # 添加correlation_id,和Client进行一致性匹配使用的
         properties=pika.BasicProperties(correlation_id=props.correlation_id),
-        # 处理结果
-        body=str(response)
+        body=str(resp)
     )
-    # 增加消息回执
-    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    # 手动 ack
+    chan.basic_ack(delivery_tag=method.delivery_tag)
 
 
-# 公平分发
-channel.basic_qos(prefetch_count=1)
-# 定义接收通道的属性/定义了callback方法,接收的队列,返回的队列在哪里？on_request 的routing_key=props.reply_to
-channel.basic_consume(queue='queue_rpc', on_message_callback=on_request)
+if __name__ == '__main__':
+    # 设置 qos 为 1，即当消费者有一个消息为消费时，队列就会停止向消费者发送消息
+    channel.basic_qos(prefetch_count=1)
+    channel.basic_consume('rpc_queue', on_request)
 
-# 开始接收消息
-print(" [x] Awaiting RPC requests")
-channel.start_consuming()
+    print("rpc server starting ... ...")
+    channel.start_consuming()

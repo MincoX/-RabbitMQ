@@ -2,7 +2,10 @@ from managerment.RabbitMQ import new_simple, new_broadcast, new_routing, new_top
 
 
 def call_back(ch, method, properties, body):
-    print(f'>>> 执行回调函数：{ch, method, properties, body}')
+    print(f'>>> 执行回调函数：ch {ch}, \n'
+          f'method {method}, \n'
+          f'properties {properties}, \n'
+          f'body {body}')
 
 
 # 创建简单队列，简单队列默只用传入队列的名称
