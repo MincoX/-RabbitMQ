@@ -11,6 +11,13 @@ V_HOST = "/"
 credentials = pika.PlainCredentials(USERNAME, PASSWORD)
 parameters = pika.ConnectionParameters(host=HOST, virtual_host=V_HOST, credentials=credentials)
 
+DELAY_MAP = {
+    0: 1000 * 10,
+    1: 1000 * 20,
+    2: 1000 * 30,
+    3: 1000 * 60,
+}
+
 
 class RabbitMq:
 
@@ -431,20 +438,27 @@ class RabbitMq:
         :return:
         """
         # 声明重试交换机，失败任务发送到重试交换机中
-        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='fanout', durable=True)
+        self.channel.exchange_declare(exchange=self.retry_exchange, exchange_type='topic',
+                                      durable=True, auto_delete=True)
         # 声明失败交换机，重试次数超 3 次将消息发送到失败交换机
-        self.channel.exchange_declare(exchange=self.fail_exchange, exchange_type='fanout', durable=True)
+        self.channel.exchange_declare(exchange=self.fail_exchange, exchange_type='topic',
+                                      durable=True, auto_delete=False)
 
         # 声明重试队列，消息延迟过期后重新转发到原交换机下
-        self.channel.queue_declare(queue=self.delay_queue, durable=True, auto_delete=False, arguments={
+        self.channel.queue_declare(queue=self.delay_queue, durable=True, auto_delete=True, arguments={
             'x-dead-letter-exchange': self.exchange_name,
-            'x-message-ttl': 10000
+            'x-message-ttl': 1000 * 60 * 5
         })
         # 声明失败队列，对与重试多次仍然失败的消息进入失败队列，通过邮件/短信通知管理员
         self.channel.queue_declare(queue=self.fail_queue, durable=True, auto_delete=False, arguments=None)
 
         # 队列绑定到对应的交换机上
-        self.channel.queue_bind(self.delay_queue, self.retry_exchange, self.delay_queue)
+        if type(self.routing_key) == list:
+            for key in self.routing_key:
+                self.channel.queue_bind(self.delay_queue, self.retry_exchange, key)
+        else:
+            self.channel.queue_bind(self.delay_queue, self.retry_exchange, self.routing_key)
+
         self.channel.queue_bind(self.fail_queue, self.fail_exchange, self.fail_queue)
 
     def destroy(self):
@@ -537,7 +551,8 @@ def retry_task_handle(mq, channel, method, properties, body):
         mandatory=False,
         properties=pika.BasicProperties(
             delivery_mode=2,  # 消息持久化（需要在交换机、队列都进行持久化情况下消息持久化才有意义）
-            headers=properties.headers
+            headers=properties.headers,
+            expiration=str(DELAY_MAP[get_retry_count(properties)])
         )
     )
 
